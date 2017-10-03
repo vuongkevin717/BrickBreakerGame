@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang = "en">
+<head>
+<meta content="text/html;charset=utf-8" http-equiv="Content-Type">
+<meta content="utf-8" http-equiv="encoding">
+</head>
+<body>
+Break some bricks
+<canvas id = "gameCanvas" width = "800" height = "600"></canvas>
+
+<script>
+var canvas;
+var canvasContext;
+var ballX = 400;
+var ballY = 300;
+
+var ballSpeedX = 0;
+var ballSpeedY = 7;
+
+const BRICK_WIDTH = 80;
+const BRICK_HEIGHT = 20;
+const BRICK_GAP = 2;
+const BRICK_COLS = 10;
+const BRICK_ROWS = 10;
+const BRICK_COUNT = BRICK_COLS*BRICK_ROWS;
+const TOP_GAP = 60;
+
+var brickGrid = new Array(BRICK_COUNT);
+
+var paddleX = 350;
+
+const BALL_RADIUS = 10;
+const BOTTOM_SPACING = 60;
+const PADDLE_THICKNESS = 10;
+const PADDLE_WIDTH = 100;
+
+const BOTTOM_BUFFER = 600 - BOTTOM_SPACING - PADDLE_THICKNESS;
+
+var playerScore = 0;
+var lives = 3;
+
+function calculateMousePos(evt) {
+	var rect = canvas.getBoundingClientRect();
+	var root = document.documentElement;
+	var mouseX = evt.clientX - rect.left - root.scrollLeft;
+	var mouseY = evt.clientY - rect.top - root.scrollTop;
+	return {
+		x:mouseX,
+		y:mouseY
+	}
+}
+
+function resetBricks() {
+	for(var i = 0; i < BRICK_COUNT; ++i) {
+		brickGrid[i] = 1;
+	}
+}
+
+function handleMouseClick(evt) {
+	if(lives <= 0) {
+		playerScore = 0;
+		lives = 3;
+		resetBricks();
+	} else if(playerScore == BRICK_COUNT) {
+		playerScore = 0;
+		lives = 3;
+		resetBricks();
+	}
+}
+
+window.onload = function() {
+	canvas = document.getElementById('gameCanvas');
+	canvasContext = canvas.getContext('2d', null);
+
+	resetBricks();
+
+	var framesPerSecond = 30;
+	setInterval(function() {
+		moveEverything();
+		brickBreak(ballX, ballY);
+		drawEverything();	
+	}, 1000/framesPerSecond);
+
+	canvas.addEventListener('mousemove',
+		function(evt) {
+			var mousePos = calculateMousePos(evt);
+			paddleX = mousePos.x - (PADDLE_WIDTH/2);
+		})
+
+	canvas.addEventListener('mousedown', handleMouseClick);
+}
+
+function ballReset() {
+	lives--;
+	ballX = canvas.width/2;
+	ballY = canvas.height/2;
+	ballSpeedX = 0;
+	ballSpeedY = 7;
+}
+
+function brickBreak(ballX, ballY) {
+	//gives value for the column that the brick is in
+	var columnNo = Math.floor(ballX/BRICK_WIDTH);	
+	
+	//gives value for the row that the brick is in
+	var rowNo = Math.floor((ballY-TOP_GAP)/BRICK_HEIGHT);
+
+	if(checkBrickLocation(ballX, ballY)) {
+		brickGrid[colToArrayIndex(columnNo, rowNo)] = false;
+		playerScore++;
+
+		var prevX = ballX - ballSpeedX;
+		var prevY = ballY - ballSpeedY;
+		var prevColumnNo = Math.floor(prevX/BRICK_WIDTH);
+		var prevRowNo = Math.floor((prevY-TOP_GAP)/BRICK_HEIGHT);
+
+		//collision off the left or right edges of a brick, else collisions off the top or bottom of a brick
+		if((prevColumnNo < columnNo || prevColumnNo > columnNo) && prevRowNo == rowNo) {
+			ballSpeedX *= -1;
+		} else if((prevRowNo < rowNo || prevRowNo > rowNo) && prevColumnNo == columnNo) {
+			ballSpeedY *= -1;
+		} else if(prevRowNo != rowNo && prevColumnNo != columnNo) {
+			ballSpeedX *= -1;
+			ballSpeedY *= -1;
+		}
+	} 
+
+}
+
+function moveEverything() {
+	//default movement of the balls
+	ballX += ballSpeedX;
+	ballY += ballSpeedY;
+
+	//defines bouncing off the right wall
+	if(ballX >= canvas.width) {
+		ballSpeedX = -ballSpeedX;
+	}
+
+	//defines bouncing off the left wall
+	if(ballX <= 0) {
+		ballSpeedX = -ballSpeedX;
+	}
+
+	//defines bouncing off the paddle
+	if(ballY >= BOTTOM_BUFFER && ballY <= BOTTOM_BUFFER+PADDLE_THICKNESS) {
+		if(ballX >= paddleX && ballX <= paddleX+PADDLE_WIDTH && ballSpeedY >= 0) {
+			ballSpeedY = -ballSpeedY;
+			var deltaX = ballX - (paddleX + PADDLE_WIDTH/2);
+			ballSpeedX = deltaX * 0.35;
+		}
+	}
+
+	//defines going past the bottom wall
+	if(ballY >= canvas.height) {
+		ballReset();
+	}
+
+	//defines bouncing off the top wall
+	if(ballY <= 0) {
+		ballSpeedY = -ballSpeedY;
+	}
+}
+
+function colToArrayIndex(col, row) {
+	return BRICK_ROWS*row + col;
+}
+
+function drawBricks() {
+	for(var i = 0; i < BRICK_ROWS; ++i) {
+		for(var j = 0; j < BRICK_COLS; ++j) {
+			if(brickGrid[colToArrayIndex(j, i)]) {
+				colorRect(BRICK_WIDTH*j, TOP_GAP + BRICK_HEIGHT*i, BRICK_WIDTH-BRICK_GAP, BRICK_HEIGHT-BRICK_GAP, 'blue');
+			}
+		}
+	}
+}
+
+function checkBrickLocation(xCoord, yCoord) {
+	//gives value for the column that the brick is in
+	var columnNo = Math.floor(xCoord/BRICK_WIDTH);	
+	
+	//gives value for the row that the brick is in
+	var rowNo = Math.floor((yCoord-TOP_GAP)/BRICK_HEIGHT);
+
+	//check for invalid indexes
+	if(columnNo >= BRICK_COLS || rowNo >= BRICK_ROWS || columnNo < 0 || rowNo < 0) {
+		return false;
+	}
+
+	//check at that location if Brick is in play
+	if(brickGrid[colToArrayIndex(columnNo, rowNo)]) {
+		return true;
+	}
+	return false;
+}
+
+function drawEverything() {
+	//draw the black game canvas
+	colorRect(0, 0, canvas.width, canvas.height, 'black');
+
+	if(lives <= 0) {
+		canvasContext.fillStyle = 'white';
+		canvasContext.fillText("You're a Fucking Noob!!!!!!!!!", 350, 300);
+		canvasContext.fillText("Click to try again...", 350, 315);
+		return;
+	}
+
+	if(playerScore == BRICK_COUNT) {
+		lives = 1000;
+		canvasContext.fillStyle = 'white';
+		canvasContext.fillText("Congratulations! You've Won!", 350, 300);
+		canvasContext.fillText("Click to play again...", 350, 315);
+		return;		
+	}
+
+	//draw the paddle
+	colorRect(paddleX, canvas.height-PADDLE_THICKNESS-BOTTOM_SPACING, PADDLE_WIDTH, PADDLE_THICKNESS, 'white');
+
+	//draw the ball
+	colorCircle(ballX, ballY, BALL_RADIUS, 'white');
+
+	//draw the brickgrid
+	drawBricks();
+
+	canvasContext.fillStyle = 'white';
+	canvasContext.fillText("Score: " + playerScore, 200, 20);
+	canvasContext.fillText("Lives: " + lives, 600, 20);
+}
+
+function colorRect(leftX, topY, width, height, drawColor) {
+	canvasContext.fillStyle = drawColor;
+	canvasContext.fillRect(leftX, topY, width, height);
+}
+
+function colorCircle(centerX, centerY, radius, drawColor) {
+	canvasContext.fillStyle = drawColor;
+	canvasContext.beginPath();
+	canvasContext.arc(centerX, centerY, radius, 0, Math.PI*2, true);
+	canvasContext.fill();
+}
+
+</script>
+
+</body>
+</html>
